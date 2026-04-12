@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import * as THREE from 'three';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { QuadViewRenderer } from './renderer/QuadViewRenderer';
 import { HologramScene } from './scene/HologramScene';
@@ -51,27 +50,66 @@ export default function App() {
   const triggerManagerRef = useRef(new TriggerManager());
 
   // Gesture detection
-  const { state: gestureState, onGesture } = useGestures(gesturesEnabled);
+  const { state: gestureState, onGesture, onFrame } = useGestures(gesturesEnabled);
 
   useEffect(() => {
-    onGesture((gesture, isWave) => {
-      triggerManagerRef.current.handleGesture(gesture, isWave);
+    onGesture((gesture) => {
+      triggerManagerRef.current.handleGesture(gesture, false);
     });
   }, [onGesture]);
 
+  // Continuous per-frame gesture driving:
+  //   open_palm → Y rotation mirrors lateral palm movement (waving mirrors hologram)
+  //   point     → Y rotation drifts continuously in the pointing direction
+  const lastPalmXRef = useRef<number | null>(null);
   useEffect(() => {
-    triggerManagerRef.current.setOnToggleRotate(() => {
-      setAutoRotate((prev) => !prev);
+    onFrame((gesture, palmX, pointDirX, pointDirY) => {
+      if (gesture === 'open_palm') {
+        setAutoRotate(false);
+        if (lastPalmXRef.current !== null) {
+          const delta = palmX - lastPalmXRef.current;
+          // 6 rad per full screen-width sweep feels 1:1 with hand movement
+          setRotationY((r) => r - delta * 6);
+        }
+        lastPalmXRef.current = palmX;
+      } else if (gesture === 'point') {
+        setAutoRotate(false);
+        // pointDirX/Y ∈ [-1, 1]: ~3 rad/s at 60 fps with full deflection
+        setRotationY((r) => r + pointDirX * 0.05);
+        setRotationX((r) => r + pointDirY * 0.05);
+        lastPalmXRef.current = null;
+      } else if (gesture === 'thumbs_up') {
+        // Zoom in — ~1.5× per second at 30 fps detection rate
+        setScaleValue((s) => Math.min(5, s * 1.015));
+        lastPalmXRef.current = null;
+      } else if (gesture === 'thumbs_down') {
+        // Zoom out
+        setScaleValue((s) => Math.max(0.2, s * (1 / 1.015)));
+        lastPalmXRef.current = null;
+      } else {
+        lastPalmXRef.current = null;
+      }
     });
+  }, [onFrame]);
+
+  useEffect(() => {
+    const tm = triggerManagerRef.current;
+    tm.setOnToggleRotate(() => setAutoRotate((prev) => !prev));
+    // Set default rules immediately so gestures work even without a model loaded
+    tm.setRules(createDefaultRules([]));
   }, []);
 
   const controllerRef = useRef<AnimationController | null>(null);
 
   const handleControllerReady = useCallback((controller: AnimationController | null) => {
     controllerRef.current = controller;
-    triggerManagerRef.current.setAnimationController(controller);
+    const tm = triggerManagerRef.current;
+    tm.setAnimationController(controller);
+    // Always update rules from the controller so gestures work regardless of
+    // whether the model has animations or not
+    const names = controller ? controller.listAnimations() : [];
+    tm.setRules(createDefaultRules(names));
     if (controller) {
-      const names = controller.listAnimations();
       setAnimationNames(names);
       setActiveAnimation(names[0] ?? null);
       setAnimationPlaying(true);
@@ -80,11 +118,6 @@ export default function App() {
       setActiveAnimation(null);
       setAnimationPlaying(false);
     }
-  }, []);
-
-  const handleAnimationsFound = useCallback((clips: THREE.AnimationClip[]) => {
-    const names = clips.map((c) => c.name);
-    triggerManagerRef.current.setRules(createDefaultRules(names));
   }, []);
 
   const handleModelSelect = useCallback((url: string, format: 'glb' | 'fbx' | 'obj') => {
@@ -119,7 +152,7 @@ export default function App() {
           setPositionY((p) => p - me.movementY * 0.005);
         } else {
           setRotationY((r) => r + me.movementX * 0.005);
-          setRotationX((r) => Math.max(-Math.PI / 3, Math.min(Math.PI / 3, r + me.movementY * 0.005)));
+          setRotationX((r) => r + me.movementY * 0.005);
         }
       };
       const onUp = () => {
@@ -163,7 +196,6 @@ export default function App() {
               scaleValue={scaleValue}
               positionX={positionX}
               positionY={positionY}
-              onAnimationsFound={handleAnimationsFound}
               onControllerReady={handleControllerReady}
             />
           </QuadViewRenderer>

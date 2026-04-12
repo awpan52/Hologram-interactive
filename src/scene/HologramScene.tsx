@@ -46,7 +46,7 @@ export function HologramScene({
       <group
         name="model-pivot"
         position={[positionX, positionY, 0]}
-        rotation={[rotationX, rotationY, 0]}
+        rotation={[rotationX, rotationY, 0, 'YXZ']}
         scale={[scaleValue, scaleValue, scaleValue]}
       >
         <Suspense fallback={null}>

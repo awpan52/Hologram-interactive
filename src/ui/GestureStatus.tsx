@@ -8,15 +8,14 @@ interface GestureStatusProps {
 
 const GESTURE_LABELS: Record<string, string> = {
   none: '--',
-  wave: 'Wave',
-  open_palm: 'Open Palm',
-  point: 'Point',
-  fist: 'Fist',
-  thumbs_up: 'Thumbs Up',
+  open_palm: 'Open Palm  →  rotate',
+  point: 'Point  →  spin',
+  thumbs_up: 'Thumbs Up  →  zoom in',
+  thumbs_down: 'Thumbs Down  →  zoom out',
 };
 
 export function GestureStatus({ gestureState, gesturesEnabled, onToggle }: GestureStatusProps) {
-  const { gesture, isWaving, isActive, isLoading, error } = gestureState;
+  const { gesture, isActive, isLoading, error } = gestureState;
 
   return (
     <div
@@ -74,10 +73,10 @@ export function GestureStatus({ gestureState, gesturesEnabled, onToggle }: Gestu
                 transition: 'background 0.2s',
               }}
             />
-            <span>{isWaving ? 'Waving!' : GESTURE_LABELS[gesture] ?? gesture}</span>
+            <span>{GESTURE_LABELS[gesture] ?? gesture}</span>
           </div>
           <div style={{ color: '#888', fontSize: 10 }}>
-            Try: wave, point, open palm, fist
+            Open palm · Point · Thumbs up/down
           </div>
         </>
       )}
